@@ -35,6 +35,101 @@ nfl-odds-databricks/
 | `nfl_pbp_current_week_ingest` | Wed 8:00 AM ET (paused) | In-season PBP for completed REG weeks |
 | `nfl_pbp_ingest` | Annual / on-demand (paused) | Full prior-season PBP (REG + POST) |
 
+## Workflows
+
+### Job overview
+
+```mermaid
+flowchart TB
+  subgraph pre["Pre-run (local, before Wednesday)"]
+    SO["scripts/stage_odds.py"] --> STG["staging/odds_latest.json"]
+    STG --> DEP["bundle deploy"]
+    DEP --> SYNC["Synced to Databricks workspace"]
+  end
+
+  subgraph weekly["nfl_weekly_pipeline · Wed 7:00 AM ET · ACTIVE"]
+    IV["ingest_nflverse"] --> IO["ingest_odds"] --> BC["build_core"]
+  end
+
+  subgraph current["nfl_pbp_current_week_ingest · Wed 8:00 AM ET · PAUSED"]
+    ICP["ingest_current_pbp"]
+  end
+
+  subgraph annual["nfl_pbp_ingest · Feb 15 / on-demand · PAUSED"]
+    IP["ingest_pbp"]
+  end
+
+  SYNC -.->|odds_staging_path| IO
+```
+
+### Weekly pipeline (tasks + tables)
+
+```mermaid
+flowchart TB
+  subgraph sources["External sources"]
+    NV["nflverse rosters + schedule"]
+    OA["The Odds API"]
+  end
+
+  subgraph local["Local staging"]
+    OA --> SO2["scripts/stage_odds.py"]
+    SO2 --> STG2["staging/odds_latest.json"]
+  end
+
+  subgraph t1["Task 1: ingest_nflverse"]
+    NV --> NB1["ingest_nflverse.py"]
+    NB1 --> TR["nflverse_rosters"]
+    NB1 --> TS["nflverse_schedule"]
+  end
+
+  subgraph t2["Task 2: ingest_odds"]
+    STG2 --> NB2["ingest_nfl_odds.py"]
+    TS --> NB2
+    NB2 --> TRAW["odds_api_nfl_raw"]
+    NB2 --> TL["nfl_odds_lines"]
+    NB2 --> TG["nfl_game_odds"]
+  end
+
+  subgraph t3["Task 3: build_core"]
+    TR --> NB3["build_nfl_core.py"]
+    TS --> NB3
+    PBP["nflverse_pbp"] --> NB3
+    TG --> NB3
+    NB3 --> DP["dim_players"]
+    NB3 --> DG["dim_games"]
+    NB3 --> PR["pbp_player_roles"]
+    NB3 --> GOL["game_odds_latest"]
+  end
+
+  t1 --> t2 --> t3
+```
+
+Odds join to official `game_id` via away/home teams and kickoff date (ET) against `nflverse_schedule`.
+
+### Play-by-play jobs
+
+```mermaid
+flowchart LR
+  NV2["nflverse PBP parquet"]
+
+  subgraph annual_job["nfl_pbp_ingest (annual / on-demand)"]
+    NB_A["ingest_nflverse_pbp.py"]
+    NV2 -->|pbp_season · REG + POST| NB_A
+    NB_A --> PBP["nflverse_pbp"]
+  end
+
+  subgraph current_job["nfl_pbp_current_week_ingest (weekly in-season)"]
+    NB_C["ingest_nflverse_pbp_current.py"]
+    NV2 -->|elapsed REG weeks| NB_C
+    NB_C --> PBPC["nflverse_pbp_current"]
+    NB_C --> META["nflverse_pbp_elapsed_weeks"]
+  end
+
+  PBP --> CORE["build_core → pbp_player_roles"]
+```
+
+`nflverse_pbp` is loaded once per completed season; `nflverse_pbp_current` refreshes elapsed in-season weeks. The current-week job exits cleanly when no weeks have finished.
+
 ### Weekly pipeline tasks
 
 1. `ingest_nflverse` — rosters and schedule
