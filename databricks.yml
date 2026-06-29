@@ -1,0 +1,68 @@
+bundle:
+  name: nfl-odds-databricks
+
+include:
+  - resources/*.yml
+
+artifacts:
+  nfl_odds_wheel:
+    type: whl
+    build: .venv\Scripts\python.exe -m build --wheel -o dist
+    path: .
+
+sync:
+  include:
+    - src/**
+    - notebooks/**
+    - staging/**
+  exclude:
+    - .venv/**
+    - dist/**
+    - __pycache__/**
+    - .git/**
+
+variables:
+  catalog:
+    description: Unity Catalog name
+    default: main
+  schema:
+    description: Schema for NFL odds tables
+    default: nfl
+  season:
+    description: NFL odds season year
+    default: "2026"
+  pbp_season:
+    description: Prior-season play-by-play to load (REG + POST) via nfl_pbp_ingest job
+    default: "2025"
+  current_pbp_season:
+    description: In-season play-by-play season for elapsed-week job
+    default: "2026"
+  roster_season:
+    description: Roster season to load
+    default: "2026"
+  schedule_season:
+    description: Regular-season schedule year to load
+    default: "2026"
+  secret_scope:
+    description: Databricks secret scope containing odds_api_key
+    default: nfl
+targets:
+  dev:
+    mode: development
+    default: true
+    workspace:
+      host: https://dbc-89a97ed5-5f7d.cloud.databricks.com
+      profile: wyatts_databricks
+    variables:
+      catalog: workspace
+      schema: nfl
+
+  prod:
+    mode: production
+    workspace:
+      host: https://dbc-89a97ed5-5f7d.cloud.databricks.com
+      profile: wyatts_databricks
+      root_path: /Workspace/Users/${workspace.current_user.userName}/.bundle/${bundle.name}/${bundle.target}
+    variables:
+      catalog: workspace
+      schema: nfl

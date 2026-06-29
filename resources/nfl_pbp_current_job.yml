@@ -1,0 +1,27 @@
+resources:
+  jobs:
+    nfl_pbp_current_week_ingest:
+      name: nfl_pbp_current_week_ingest
+      description: >
+        Loads nflverse play-by-play for completed 2026 regular-season weeks.
+        Runs weekly during the season after the prior week finishes.
+      schedule:
+        quartz_cron_expression: "0 0 8 ? * WED"
+        timezone_id: America/New_York
+        pause_status: PAUSED
+      environments:
+        - environment_key: nfl_env
+          spec:
+            environment_version: "4"
+            dependencies:
+              - pandas>=2.0.0
+              - pyarrow>=14.0.0
+      tasks:
+        - task_key: ingest_current_pbp
+          environment_key: nfl_env
+          notebook_task:
+            notebook_path: ../notebooks/ingest_nflverse_pbp_current.py
+            base_parameters:
+              catalog: ${var.catalog}
+              schema: ${var.schema}
+              pbp_season: ${var.current_pbp_season}

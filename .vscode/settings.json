@@ -1,0 +1,20 @@
+{
+  "databricks.bundle.target": "dev",
+  "databricks.bundle.profile": "wyatts_databricks",
+  "python.defaultInterpreterPath": "${workspaceFolder}/.venv/Scripts/python.exe",
+  "python.analysis.extraPaths": ["${workspaceFolder}/src"],
+  "python.testing.pytestEnabled": true,
+  "python.testing.pytestArgs": ["tests"],
+  "files.exclude": {
+    "**/__pycache__": true,
+    "**/.pytest_cache": true,
+    "**/dist": true,
+    "**/*.egg-info": true
+  },
+  "[python]": {
+    "editor.formatOnSave": true,
+    "editor.defaultFormatter": "ms-python.black-formatter"
+  },
+  "jupyter.interactiveWindow.cellMarker.codeRegex": "^# COMMAND ----------|^# Databricks notebook source|^(#\\s*%%|#\\s*\\<codecell\\>|#\\s*In\\[\\d*?\\]|#\\s*In\\[ \\])",
+  "jupyter.interactiveWindow.cellMarker.default": "# COMMAND ----------"
+}

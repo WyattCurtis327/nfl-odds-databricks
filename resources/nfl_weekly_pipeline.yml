@@ -1,0 +1,53 @@
+resources:
+  jobs:
+    nfl_weekly_pipeline:
+      name: nfl_weekly_pipeline
+      description: >
+        Weekly NFL data pipeline. Refreshes nflverse reference data, pulls odds,
+        and builds ID-safe dimensions keyed on game_id and gsis_id.
+      schedule:
+        quartz_cron_expression: "0 0 7 ? * WED"
+        timezone_id: America/New_York
+        pause_status: UNPAUSED
+      environments:
+        - environment_key: nfl_env
+          spec:
+            environment_version: "4"
+            dependencies:
+              - pandas>=2.0.0
+              - pyarrow>=14.0.0
+              - requests>=2.31.0
+      tasks:
+        - task_key: ingest_nflverse
+          environment_key: nfl_env
+          notebook_task:
+            notebook_path: ../notebooks/ingest_nflverse.py
+            base_parameters:
+              catalog: ${var.catalog}
+              schema: ${var.schema}
+              roster_season: ${var.roster_season}
+              schedule_season: ${var.schedule_season}
+
+        - task_key: ingest_odds
+          environment_key: nfl_env
+          depends_on:
+            - task_key: ingest_nflverse
+          notebook_task:
+            notebook_path: ../notebooks/ingest_nfl_odds.py
+            base_parameters:
+              catalog: ${var.catalog}
+              schema: ${var.schema}
+              season: ${var.season}
+              secret_scope: ${var.secret_scope}
+              secret_key: odds_api_key
+              odds_staging_path: ../staging/odds_latest.json
+
+        - task_key: build_core
+          environment_key: nfl_env
+          depends_on:
+            - task_key: ingest_odds
+          notebook_task:
+            notebook_path: ../notebooks/build_nfl_core.py
+            base_parameters:
+              catalog: ${var.catalog}
+              schema: ${var.schema}
