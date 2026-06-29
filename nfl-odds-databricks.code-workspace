@@ -6,7 +6,6 @@
   ],
   "settings": {
     "databricks.bundle.target": "dev",
-    "databricks.bundle.profile": "wyatts_databricks",
     "python.defaultInterpreterPath": "${workspaceFolder}/.venv/Scripts/python.exe"
   },
   "extensions": {
