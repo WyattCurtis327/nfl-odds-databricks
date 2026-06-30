@@ -36,6 +36,17 @@ dbutils.widgets.dropdown(
     ["true", "false"],
     "Append predictions to Delta + MLflow",
 )
+dbutils.widgets.dropdown(
+    "send_email",
+    "true",
+    ["true", "false"],
+    "Email picks after run (requires SendGrid secret)",
+)
+dbutils.widgets.text(
+    "notify_email",
+    "wyatt_curtis@hotmail.com",
+    "Recipient email address",
+)
 
 catalog = dbutils.widgets.get("catalog")
 schema = dbutils.widgets.get("schema")
@@ -47,6 +58,8 @@ market_blend = float(dbutils.widgets.get("market_blend"))
 pick_threshold = float(dbutils.widgets.get("pick_threshold"))
 mlflow_experiment = dbutils.widgets.get("mlflow_experiment").strip()
 log_predictions = dbutils.widgets.get("log_predictions").lower() == "true"
+send_email = dbutils.widgets.get("send_email").lower() == "true"
+notify_email = dbutils.widgets.get("notify_email").strip()
 
 pbp_table = f"{catalog}.{schema}.nflverse_pbp"
 odds_table = f"{catalog}.{schema}.game_odds_latest"
@@ -87,6 +100,7 @@ from nfl_odds.simulation import (
     prepare_prediction_log,
     simulate_weekly_picks,
 )
+from nfl_odds.notifications import format_predictions_email_html, send_email_sendgrid
 from nfl_odds.spark_io import pandas_to_spark
 
 # COMMAND ----------
@@ -335,3 +349,83 @@ if log_predictions:
         print(f"delta table: {predictions_table}")
 else:
     print("log_predictions=false; skipped Delta + MLflow write")
+
+# COMMAND ----------
+
+# MAGIC %md
+# MAGIC ## Email predictions (optional)
+# MAGIC Sends an HTML table of picks via SendGrid. Requires secrets in scope `nfl`:
+# MAGIC `sendgrid_api_key` and `sendgrid_from_email` (verified sender).
+
+# COMMAND ----------
+
+if send_email and notify_email:
+    import os
+
+    api_key = ""
+    from_email = ""
+    try:
+        api_key = dbutils.secrets.get(scope="nfl", key="sendgrid_api_key").strip()
+    except Exception:
+        api_key = (
+            os.environ.get("SENDGRID_API_KEY")
+            or os.environ.get("sendgrid_api_key")
+            or ""
+        ).strip()
+
+    try:
+        from_email = dbutils.secrets.get(scope="nfl", key="sendgrid_from_email").strip()
+    except Exception:
+        from_email = (
+            os.environ.get("SENDGRID_FROM_EMAIL")
+            or os.environ.get("SENDGRID_FROM")
+            or notify_email
+        ).strip()
+
+    if not api_key:
+        print(
+            "Email skipped: set sendgrid_api_key in the nfl secret scope "
+            "(or SENDGRID_API_KEY in the environment)."
+        )
+    elif not from_email:
+        print("Email skipped: no sendgrid_from_email secret or notify_email fallback.")
+    else:
+        run_page_url = None
+        try:
+            ctx = dbutils.notebook.entry_point.getDbutils().notebook().getContext()
+            host = ctx.browserHostName().get()
+            run_id = ctx.currentRunId().get()
+            if run_id and run_id.get() > 0:
+                run_page_url = f"https://{host}/#job/run/{run_id.get()}"
+        except Exception:
+            run_page_url = None
+
+        email_body = format_predictions_email_html(
+            prediction_log if log_predictions else picks,
+            season=season,
+            week=target_week,
+            prediction_run_id=prediction_run_id,
+            run_page_url=run_page_url,
+        )
+        subject = f"NFL Monte Carlo picks — {season} Week {target_week}"
+        try:
+            send_email_sendgrid(
+                api_key=api_key,
+                to_email=notify_email,
+                subject=subject,
+                html_content=email_body,
+                from_email=from_email,
+            )
+            print(f"Emailed picks to {notify_email}")
+        except Exception as exc:
+            print(
+                "Email failed from serverless compute (external APIs are often blocked). "
+                "Predictions are still logged to Delta. Run locally:\n"
+                f"  python scripts/email_weekly_picks.py --week {target_week} "
+                f"--to {notify_email}\n"
+                f"Error: {exc}"
+            )
+elif send_email:
+    print("send_email=true but notify_email is blank; skipped email")
+else:
+    print("send_email=false; skipped email")

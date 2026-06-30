@@ -154,6 +154,30 @@ Runs 10,000 Monte Carlo simulations per game to estimate cover probabilities for
 - `total_pick` / `total_confidence` — OVER or UNDER
 - `proj_away_score`, `proj_home_score`, `proj_total` — blended projections
 
+### Email notifications
+
+Two options:
+
+1. **Job success email (built-in)** — Databricks sends a run status email with a link to the job run. No pick details. Configured on `nfl_monte_carlo_picks` job via `email_notifications`.
+2. **Picks table email (SendGrid)** — Set `send_email=true` and add secrets to scope `nfl`:
+   - `sendgrid_api_key`
+   - `sendgrid_from_email` (verified sender in SendGrid)
+
+```powershell
+databricks secrets put-secret nfl sendgrid_api_key --profile {YOUR_PROFILE} --string-value YOUR_KEY
+databricks secrets put-secret nfl sendgrid_from_email --profile {YOUR_PROFILE} --string-value you@verified-domain.com
+```
+
+The notebook attempts to email picks from Databricks, but **serverless compute often cannot reach SendGrid** (same restriction as The Odds API). Predictions still log to Delta if email fails.
+
+**Recommended:** email from your machine after the notebook run:
+
+```powershell
+python scripts/email_weekly_picks.py --week 1 --to wyatt_curtis@hotmail.com
+```
+
+Uses `SENDGRID_API_KEY` from your local environment and reads the latest picks from `workspace.nfl.monte_carlo_predictions`.
+
 ### Logging (when `log_predictions=true`)
 
 Each run appends to **`workspace.nfl.monte_carlo_predictions`** with:
@@ -305,6 +329,7 @@ Local data under `output/` can be used to prototype without Databricks:
 | Accuracy notebook finds no scores | Wait until `nflverse_schedule` has `home_score` / `away_score` filled |
 | No predictions to grade | Run `monte_carlo_weekly_picks` with `log_predictions=true` first |
 | MLflow experiment not found | Create `/Shared/nfl_monte_carlo` in the MLflow UI, or change the widget |
+| Email not sent | Add `sendgrid_api_key` and `sendgrid_from_email` to the `nfl` secret scope |
 
 ## Related files
 

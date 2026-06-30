@@ -1,0 +1,48 @@
+resources:
+  jobs:
+    nfl_monte_carlo_picks:
+      name: nfl_monte_carlo_picks
+      description: >
+        Run Monte Carlo spread/total picks for the upcoming week, log predictions,
+        and email results.
+      schedule:
+        quartz_cron_expression: "0 0 9 ? * THU"
+        timezone_id: America/New_York
+        pause_status: PAUSED
+      email_notifications:
+        on_success:
+          - wyatt_curtis@hotmail.com
+        on_failure:
+          - wyatt_curtis@hotmail.com
+      environments:
+        - environment_key: nfl_env
+          spec:
+            environment_version: "4"
+            dependencies:
+              - pandas>=2.0.0
+              - pyarrow>=14.0.0
+              - numpy>=1.26.0
+              - requests>=2.31.0
+      tasks:
+        - task_key: weekly_picks
+          environment_key: nfl_env
+          email_notifications:
+            on_success:
+              - wyatt_curtis@hotmail.com
+            on_failure:
+              - wyatt_curtis@hotmail.com
+          notebook_task:
+            notebook_path: ../notebooks/monte_carlo_weekly_picks.py
+            base_parameters:
+              catalog: ${var.catalog}
+              schema: ${var.schema}
+              season: ${var.season}
+              pbp_season: ${var.pbp_season}
+              target_week: ""
+              n_simulations: "10000"
+              market_blend: "0.35"
+              pick_threshold: "0.55"
+              mlflow_experiment: "/Shared/nfl_monte_carlo"
+              log_predictions: "true"
+              send_email: "true"
+              notify_email: "wyatt_curtis@hotmail.com"
