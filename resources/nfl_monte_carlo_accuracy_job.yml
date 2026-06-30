@@ -1,0 +1,30 @@
+resources:
+  jobs:
+    nfl_monte_carlo_accuracy:
+      name: nfl_monte_carlo_accuracy
+      description: >
+        Grade Monte Carlo spread/total predictions after a week completes.
+        Run on Tuesdays once nflverse_schedule has final scores.
+      schedule:
+        quartz_cron_expression: "0 0 10 ? * TUE"
+        timezone_id: America/New_York
+        pause_status: PAUSED
+      environments:
+        - environment_key: nfl_env
+          spec:
+            environment_version: "4"
+            dependencies:
+              - pandas>=2.0.0
+              - pyarrow>=14.0.0
+      tasks:
+        - task_key: grade_weekly_predictions
+          environment_key: nfl_env
+          notebook_task:
+            notebook_path: ../notebooks/monte_carlo_weekly_accuracy.py
+            base_parameters:
+              catalog: ${var.catalog}
+              schema: ${var.schema}
+              season: ${var.season}
+              target_week: ""
+              prediction_run_id: ""
+              log_grades: "true"

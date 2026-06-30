@@ -14,26 +14,40 @@ Data is keyed on official identifiers (`game_id`, `gsis_id`) to avoid team-name 
 
 Odds are joined to nflverse `game_id` (e.g. `2026_01_NE_SEA`) using away/home teams and kickoff date (ET).
 
+## PBP analytics (fantasy draft & Monte Carlo picks)
+
+On top of the ingest pipeline, notebooks use play-by-play stats and betting lines to:
+
+- Run a **mock 12-team snake fantasy draft** (`mock_fantasy_draft`)
+- **Simulate spread and total picks** before each week (`monte_carlo_weekly_picks`)
+- **Grade prediction accuracy** after games finish (`monte_carlo_weekly_accuracy`)
+
+Predictions and grades are stored in Delta (`monte_carlo_predictions`, `monte_carlo_prediction_grades`) and tracked in MLflow (`/Shared/nfl_monte_carlo`).
+
+See **[docs/README.md](docs/README.md)** for the full workflow, widgets, tables, and SQL examples.
+
 ## Project layout
 
 ```
 nfl-odds-databricks/
 ├── databricks.yml              # Asset Bundle config and variables
 ├── resources/                  # Job definitions
-├── notebooks/                  # Databricks ingest notebooks
+├── notebooks/                  # Databricks ingest + analytics notebooks
+├── docs/                       # Use-case guides (fantasy draft, Monte Carlo)
 ├── src/nfl_odds/               # Shared Python package
 ├── scripts/                    # Local fetch/stage helpers
 ├── staging/                    # Staged odds JSON for serverless ingest
 └── output/                     # Local CSV/parquet outputs
 ```
 
-## Jobs (3)
+## Jobs (4)
 
 | Job | Schedule | Purpose |
 |-----|----------|---------|
 | `nfl_weekly_pipeline` | **Wed 7:00 AM ET** (active) | Rosters + schedule → staged odds → dimension tables |
 | `nfl_pbp_current_week_ingest` | Wed 8:00 AM ET (paused) | In-season PBP for completed REG weeks |
 | `nfl_pbp_ingest` | Annual / on-demand (paused) | Full prior-season PBP (REG + POST) |
+| `nfl_monte_carlo_accuracy` | Tue 10:00 AM ET (paused) | Grade Monte Carlo predictions after games finish |
 
 ## Workflows
 
@@ -152,6 +166,8 @@ flowchart LR
 | `dim_games` | One row per game (`game_id` key) |
 | `pbp_player_roles` | PBP player references by `player_id`, not name |
 | `game_odds_latest` | Latest odds per `game_id` and bookmaker |
+| `monte_carlo_predictions` | Logged spread/total picks per simulation run |
+| `monte_carlo_prediction_grades` | Graded predictions vs final scores |
 
 ## Prerequisites
 
