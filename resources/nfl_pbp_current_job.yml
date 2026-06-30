@@ -16,6 +16,7 @@ resources:
             dependencies:
               - pandas>=2.0.0
               - pyarrow>=14.0.0
+              - ../dist/nfl_odds-0.1.0-py3-none-any.whl
       tasks:
         - task_key: ingest_current_pbp
           environment_key: nfl_env

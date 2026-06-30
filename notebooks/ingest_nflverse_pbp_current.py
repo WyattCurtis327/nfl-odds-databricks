@@ -5,7 +5,7 @@
 
 # COMMAND ----------
 
-dbutils.widgets.text("catalog", "main", "Unity Catalog")
+dbutils.widgets.text("catalog", "workspace", "Unity Catalog")
 dbutils.widgets.text("schema", "nfl", "Schema")
 dbutils.widgets.text("pbp_season", "2026", "Current PBP season")
 
@@ -18,24 +18,7 @@ weeks_table = f"{catalog}.{schema}.nflverse_pbp_elapsed_weeks"
 
 # COMMAND ----------
 
-import os
-import sys
 from datetime import datetime, timezone
-
-
-def _add_src_to_path() -> str:
-    candidates = [
-        os.path.abspath(os.path.join(os.getcwd(), "..", "src")),
-        os.path.abspath(os.path.join(os.getcwd(), "src")),
-    ]
-    for path in candidates:
-        if os.path.isdir(path):
-            sys.path.insert(0, path)
-            return path
-    return ""
-
-
-_add_src_to_path()
 
 import pandas as pd
 

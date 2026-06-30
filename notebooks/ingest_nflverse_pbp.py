@@ -5,7 +5,7 @@
 
 # COMMAND ----------
 
-dbutils.widgets.text("catalog", "main", "Unity Catalog")
+dbutils.widgets.text("catalog", "workspace", "Unity Catalog")
 dbutils.widgets.text("schema", "nfl", "Schema")
 dbutils.widgets.text("pbp_season", "2025", "Play-by-play season")
 
@@ -17,24 +17,7 @@ pbp_table = f"{catalog}.{schema}.nflverse_pbp"
 
 # COMMAND ----------
 
-import os
-import sys
 from datetime import datetime, timezone
-
-
-def _add_src_to_path() -> str:
-    candidates = [
-        os.path.abspath(os.path.join(os.getcwd(), "..", "src")),
-        os.path.abspath(os.path.join(os.getcwd(), "src")),
-    ]
-    for path in candidates:
-        if os.path.isdir(path):
-            sys.path.insert(0, path)
-            return path
-    return ""
-
-
-_add_src_to_path()
 
 from nfl_odds.nflverse_data import fetch_play_by_play
 from nfl_odds.spark_io import pandas_to_spark

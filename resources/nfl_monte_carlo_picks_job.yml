@@ -11,9 +11,9 @@ resources:
         pause_status: PAUSED
       email_notifications:
         on_success:
-          - wyatt_curtis@hotmail.com
+          - ${var.notify_email}
         on_failure:
-          - wyatt_curtis@hotmail.com
+          - ${var.notify_email}
       environments:
         - environment_key: nfl_env
           spec:
@@ -23,14 +23,15 @@ resources:
               - pyarrow>=14.0.0
               - numpy>=1.26.0
               - requests>=2.31.0
+              - ../dist/nfl_odds-0.1.0-py3-none-any.whl
       tasks:
         - task_key: weekly_picks
           environment_key: nfl_env
           email_notifications:
             on_success:
-              - wyatt_curtis@hotmail.com
+              - ${var.notify_email}
             on_failure:
-              - wyatt_curtis@hotmail.com
+              - ${var.notify_email}
           notebook_task:
             notebook_path: ../notebooks/monte_carlo_weekly_picks.py
             base_parameters:
@@ -38,6 +39,7 @@ resources:
               schema: ${var.schema}
               season: ${var.season}
               pbp_season: ${var.pbp_season}
+              current_pbp_season: ${var.current_pbp_season}
               target_week: ""
               n_simulations: "10000"
               market_blend: "0.35"
@@ -45,4 +47,4 @@ resources:
               mlflow_experiment: "/Shared/nfl_monte_carlo"
               log_predictions: "true"
               send_email: "true"
-              notify_email: "wyatt_curtis@hotmail.com"
+              notify_email: ${var.notify_email}

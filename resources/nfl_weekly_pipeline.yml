@@ -9,6 +9,9 @@ resources:
         quartz_cron_expression: "0 0 7 ? * WED"
         timezone_id: America/New_York
         pause_status: UNPAUSED
+      email_notifications:
+        on_failure:
+          - ${var.notify_email}
       environments:
         - environment_key: nfl_env
           spec:
@@ -17,6 +20,8 @@ resources:
               - pandas>=2.0.0
               - pyarrow>=14.0.0
               - requests>=2.31.0
+              - numpy>=1.26.0
+              - ../dist/nfl_odds-0.1.0-py3-none-any.whl
       tasks:
         - task_key: ingest_nflverse
           environment_key: nfl_env
@@ -41,6 +46,7 @@ resources:
               secret_scope: ${var.secret_scope}
               secret_key: odds_api_key
               odds_staging_path: ../staging/odds_latest.json
+              min_match_rate: "0.9"
 
         - task_key: build_core
           environment_key: nfl_env

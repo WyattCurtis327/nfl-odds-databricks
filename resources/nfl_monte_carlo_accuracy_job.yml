@@ -9,6 +9,9 @@ resources:
         quartz_cron_expression: "0 0 10 ? * TUE"
         timezone_id: America/New_York
         pause_status: PAUSED
+      email_notifications:
+        on_failure:
+          - ${var.notify_email}
       environments:
         - environment_key: nfl_env
           spec:
@@ -16,6 +19,8 @@ resources:
             dependencies:
               - pandas>=2.0.0
               - pyarrow>=14.0.0
+              - numpy>=1.26.0
+              - ../dist/nfl_odds-0.1.0-py3-none-any.whl
       tasks:
         - task_key: grade_weekly_predictions
           environment_key: nfl_env

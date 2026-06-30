@@ -1,0 +1,39 @@
+name: Stage odds and deploy
+
+on:
+  schedule:
+    # 10:00 UTC Wed ≈ 6:00 AM ET (EDT) — before nfl_weekly_pipeline at 7 AM ET
+    - cron: "0 10 * * 3"
+  workflow_dispatch:
+
+jobs:
+  stage-and-deploy:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -e ".[dev]"
+
+      - name: Install Databricks CLI
+        run: curl -fsSL https://raw.githubusercontent.com/databricks/setup-cli/main/install.sh | sh
+
+      - name: Stage odds from The Odds API
+        run: python scripts/stage_odds.py
+        env:
+          odds_api_key: ${{ secrets.ODDS_API_KEY }}
+
+      - name: Deploy bundle to Databricks
+        run: python scripts/deploy_bundle.py dev
+        env:
+          DATABRICKS_HOST: ${{ secrets.DATABRICKS_HOST }}
+          DATABRICKS_TOKEN: ${{ secrets.DATABRICKS_TOKEN }}
+          databricks_profile: ${{ secrets.DATABRICKS_PROFILE }}
+          databricks_email_account: ${{ secrets.DATABRICKS_EMAIL_ACCOUNT }}
+          databricks_cluster_id: ${{ secrets.DATABRICKS_CLUSTER_ID }}

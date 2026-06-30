@@ -49,24 +49,6 @@ print(f"Schedule:    {schedule_table}")
 
 # COMMAND ----------
 
-import os
-import sys
-
-
-def _add_src_to_path() -> str:
-    candidates = [
-        os.path.abspath(os.path.join(os.getcwd(), "..", "src")),
-        os.path.abspath(os.path.join(os.getcwd(), "src")),
-    ]
-    for path in candidates:
-        if os.path.isdir(path):
-            sys.path.insert(0, path)
-            return path
-    return ""
-
-
-_add_src_to_path()
-
 import pandas as pd
 
 from nfl_odds.simulation import (

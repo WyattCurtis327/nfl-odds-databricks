@@ -5,7 +5,7 @@
 
 # COMMAND ----------
 
-dbutils.widgets.text("catalog", "main", "Unity Catalog")
+dbutils.widgets.text("catalog", "workspace", "Unity Catalog")
 dbutils.widgets.text("schema", "nfl", "Schema")
 
 catalog = dbutils.widgets.get("catalog")
@@ -15,27 +15,11 @@ dim_players = f"{catalog}.{schema}.dim_players"
 dim_games = f"{catalog}.{schema}.dim_games"
 pbp_player_roles = f"{catalog}.{schema}.pbp_player_roles"
 game_odds_latest = f"{catalog}.{schema}.game_odds_latest"
+pbp_table = f"{catalog}.{schema}.nflverse_pbp"
 
 # COMMAND ----------
 
-import os
-import sys
 from datetime import datetime, timezone
-
-
-def _add_src_to_path() -> str:
-    candidates = [
-        os.path.abspath(os.path.join(os.getcwd(), "..", "src")),
-        os.path.abspath(os.path.join(os.getcwd(), "src")),
-    ]
-    for path in candidates:
-        if os.path.isdir(path):
-            sys.path.insert(0, path)
-            return path
-    return ""
-
-
-_add_src_to_path()
 
 import pandas as pd
 
@@ -50,7 +34,13 @@ ingested_at = datetime.now(timezone.utc)
 
 rosters_pdf = spark.table(f"{catalog}.{schema}.nflverse_rosters").toPandas()
 schedule_pdf = spark.table(f"{catalog}.{schema}.nflverse_schedule").toPandas()
-pbp_pdf = spark.table(f"{catalog}.{schema}.nflverse_pbp").toPandas()
+
+if spark.catalog.tableExists(pbp_table):
+    pbp_pdf = spark.table(pbp_table).toPandas()
+    print(f"Loaded {len(pbp_pdf)} PBP rows from {pbp_table}")
+else:
+    pbp_pdf = pd.DataFrame()
+    print(f"PBP table {pbp_table} not found; writing empty pbp_player_roles")
 
 players_df = build_player_dimension(rosters_pdf)
 games_df = build_game_dimension(schedule_pdf)

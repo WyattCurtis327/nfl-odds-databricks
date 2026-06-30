@@ -5,7 +5,7 @@
 
 # COMMAND ----------
 
-dbutils.widgets.text("catalog", "main", "Unity Catalog")
+dbutils.widgets.text("catalog", "workspace", "Unity Catalog")
 dbutils.widgets.text("schema", "nfl", "Schema")
 dbutils.widgets.text("season", "2026", "NFL season")
 dbutils.widgets.text("secret_scope", "nfl", "Secret scope")
@@ -15,6 +15,7 @@ dbutils.widgets.text(
     "../staging/odds_latest.json",
     "Local staged odds JSON (used when serverless cannot reach Odds API)",
 )
+dbutils.widgets.text("min_match_rate", "0.9", "Minimum game_id match rate (0-1)")
 
 catalog = dbutils.widgets.get("catalog")
 schema = dbutils.widgets.get("schema")
@@ -22,38 +23,24 @@ season = int(dbutils.widgets.get("season"))
 secret_scope = dbutils.widgets.get("secret_scope")
 secret_key = dbutils.widgets.get("secret_key")
 odds_staging_path = dbutils.widgets.get("odds_staging_path").strip()
+min_match_rate = float(dbutils.widgets.get("min_match_rate"))
 
 bronze_raw = f"{catalog}.{schema}.odds_api_nfl_raw"
 bronze_schedule = f"{catalog}.{schema}.nflverse_schedule"
 silver_lines = f"{catalog}.{schema}.nfl_odds_lines"
 gold_game_odds = f"{catalog}.{schema}.nfl_game_odds"
+quality_table = f"{catalog}.{schema}.odds_match_quality"
 
 # COMMAND ----------
 
 import json
 import os
-import sys
 from datetime import datetime, timezone
-
-
-def _add_src_to_path() -> str:
-    candidates = [
-        os.path.abspath(os.path.join(os.getcwd(), "..", "src")),
-        os.path.abspath(os.path.join(os.getcwd(), "src")),
-    ]
-    for path in candidates:
-        if os.path.isdir(path):
-            sys.path.insert(0, path)
-            return path
-    return ""
-
-
-_add_src_to_path()
 
 import pandas as pd
 
 from nfl_odds.fetch import OddsApiError, fetch_nfl_odds
-from nfl_odds.schedule import fetch_nflverse_schedule
+from nfl_odds.quality import assess_game_id_match_rate
 from nfl_odds.spark_io import pandas_to_spark
 from nfl_odds.transform import flatten_odds, to_game_odds_rows
 
@@ -81,7 +68,13 @@ def _load_staged_odds(path: str) -> tuple[list, dict]:
 
 
 ingested_at = datetime.now(timezone.utc)
-schedule_df = fetch_nflverse_schedule(season)
+
+if not spark.catalog.tableExists(bronze_schedule):
+    raise RuntimeError(
+        f"Missing {bronze_schedule}. Run ingest_nflverse before ingest_odds."
+    )
+
+schedule_df = spark.table(bronze_schedule).toPandas()
 staging_file = _resolve_staging_path(odds_staging_path)
 
 if staging_file:
@@ -124,15 +117,42 @@ raw_df = spark.createDataFrame(
 )
 raw_df.write.format("delta").mode("append").saveAsTable(bronze_raw)
 
-schedule_spark = pandas_to_spark(spark, schedule_df)
-schedule_spark.write.format("delta").mode("overwrite").option(
-    "overwriteSchema", "true"
-).saveAsTable(bronze_schedule)
-
 # COMMAND ----------
 
 line_rows = flatten_odds(odds_games, schedule_df=schedule_df, ingested_at=ingested_at)
 game_rows = to_game_odds_rows(odds_games, schedule_df, ingested_at=ingested_at)
+
+match_stats = assess_game_id_match_rate(game_rows, min_rate=min_match_rate)
+quality_row = {
+    **match_stats,
+    "ingested_at": ingested_at.isoformat(),
+    "season": season,
+    "source": source,
+}
+pandas_to_spark(spark, pd.DataFrame([quality_row])).write.format("delta").mode(
+    "append"
+).option("mergeSchema", "true").saveAsTable(quality_table)
+
+print(
+    "game_id match rate:",
+    f"{match_stats['matched_games']}/{match_stats['total_games']}",
+    f"({match_stats['match_rate']:.1%})",
+)
+
+if not match_stats["passed"]:
+    unmatched = [row for row in game_rows if not row.get("game_id")]
+    preview = [
+        {
+            "away_team": row.get("away_team"),
+            "home_team": row.get("home_team"),
+            "gameday": row.get("gameday"),
+        }
+        for row in unmatched[:5]
+    ]
+    raise RuntimeError(
+        f"game_id match rate {match_stats['match_rate']:.1%} below minimum "
+        f"{min_match_rate:.1%}. Sample unmatched games: {preview}"
+    )
 
 pandas_to_spark(spark, pd.DataFrame(line_rows)).write.format("delta").mode("append").saveAsTable(
     silver_lines

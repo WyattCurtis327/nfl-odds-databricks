@@ -1,11 +1,13 @@
 import pandas as pd
 
 from nfl_odds.simulation import (
+    filter_ungraded_predictions,
     grade_predictions,
     infer_latest_completed_week,
     prepare_prediction_log,
     resolve_spread_result,
     resolve_total_result,
+    select_latest_prediction_run,
     summarize_prediction_accuracy,
 )
 
@@ -65,6 +67,38 @@ def test_grade_predictions_marks_correct_picks():
     metrics = summarize_prediction_accuracy(graded)
     assert metrics["spread_accuracy"] == 0.0
     assert metrics["total_accuracy"] == 0.0
+
+
+def test_select_latest_prediction_run():
+    predictions = pd.DataFrame(
+        [
+            {
+                "season": 2026,
+                "week": 1,
+                "prediction_run_id": "run-old",
+                "predicted_at": "2026-06-01T10:00:00+00:00",
+            },
+            {
+                "season": 2026,
+                "week": 1,
+                "prediction_run_id": "run-new",
+                "predicted_at": "2026-06-02T10:00:00+00:00",
+            },
+        ]
+    )
+    assert select_latest_prediction_run(predictions, season=2026, week=1) == "run-new"
+
+
+def test_filter_ungraded_predictions():
+    predictions = pd.DataFrame(
+        [
+            {"prediction_id": "a", "game_id": "g1"},
+            {"prediction_id": "b", "game_id": "g2"},
+        ]
+    )
+    grades = pd.DataFrame([{"prediction_id": "a"}])
+    remaining = filter_ungraded_predictions(predictions, grades)
+    assert list(remaining["prediction_id"]) == ["b"]
 
 
 def test_infer_latest_completed_week():

@@ -62,6 +62,39 @@ def _game_results_from_pbp(pbp: pd.DataFrame) -> pd.DataFrame:
     return games
 
 
+def combine_pbp_seasons(
+    prior_pbp: pd.DataFrame,
+    current_pbp: pd.DataFrame,
+    *,
+    prior_season: int | None = None,
+    current_season: int | None = None,
+) -> pd.DataFrame:
+    """Merge prior and in-season PBP; current-season rows win on duplicate game_id."""
+    frames: list[pd.DataFrame] = []
+
+    if prior_pbp is not None and not prior_pbp.empty:
+        prior = prior_pbp.copy()
+        if prior_season is not None and "season" in prior.columns:
+            prior = prior[prior["season"] == prior_season]
+        if not prior.empty:
+            frames.append(prior)
+
+    if current_pbp is not None and not current_pbp.empty:
+        current = current_pbp.copy()
+        if current_season is not None and "season" in current.columns:
+            current = current[current["season"] == current_season]
+        if not current.empty:
+            frames.append(current)
+
+    if not frames:
+        return pd.DataFrame()
+
+    combined = pd.concat(frames, ignore_index=True)
+    if "game_id" in combined.columns and len(frames) > 1:
+        combined = combined.drop_duplicates(subset=["game_id"], keep="last")
+    return combined
+
+
 def compute_team_scoring_profiles(pbp: pd.DataFrame) -> pd.DataFrame:
     """Derive per-team scoring means and volatility from play-by-play results."""
     games = _game_results_from_pbp(pbp)

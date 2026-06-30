@@ -9,8 +9,8 @@
 # MAGIC - Total pick (OVER/UNDER) and cover probability
 # MAGIC - Projected scores from PBP + market blend
 # MAGIC
-# MAGIC **Source tables:** `workspace.nfl.nflverse_pbp`, `workspace.nfl.game_odds_latest`,
-# MAGIC `workspace.nfl.nflverse_schedule`
+# MAGIC **Source tables:** `workspace.nfl.nflverse_pbp`, `workspace.nfl.nflverse_pbp_current`,
+# MAGIC `workspace.nfl.game_odds_latest`, `workspace.nfl.nflverse_schedule`
 # MAGIC
 # MAGIC **Logs to:** `workspace.nfl.monte_carlo_predictions` and MLflow experiment
 # MAGIC `/Shared/nfl_monte_carlo`. Grade results after the week with `monte_carlo_weekly_accuracy`.
@@ -20,7 +20,8 @@
 dbutils.widgets.text("catalog", "workspace", "Unity Catalog")
 dbutils.widgets.text("schema", "nfl", "Schema")
 dbutils.widgets.text("season", "2026", "Schedule / odds season")
-dbutils.widgets.text("pbp_season", "2025", "PBP analytics season")
+dbutils.widgets.text("pbp_season", "2025", "Prior-season PBP analytics")
+dbutils.widgets.text("current_pbp_season", "2026", "In-season PBP analytics")
 dbutils.widgets.text("target_week", "1", "Week to simulate (blank = next unplayed)")
 dbutils.widgets.text("n_simulations", "10000", "Monte Carlo simulations per game")
 dbutils.widgets.text("market_blend", "0.35", "Weight given to market lines (0-1)")
@@ -42,16 +43,13 @@ dbutils.widgets.dropdown(
     ["true", "false"],
     "Email picks after run (requires SendGrid secret)",
 )
-dbutils.widgets.text(
-    "notify_email",
-    "wyatt_curtis@hotmail.com",
-    "Recipient email address",
-)
+dbutils.widgets.text("notify_email", "", "Recipient email address")
 
 catalog = dbutils.widgets.get("catalog")
 schema = dbutils.widgets.get("schema")
 season = int(dbutils.widgets.get("season"))
 pbp_season = int(dbutils.widgets.get("pbp_season"))
+current_pbp_season = int(dbutils.widgets.get("current_pbp_season"))
 target_week_raw = dbutils.widgets.get("target_week").strip()
 n_simulations = int(dbutils.widgets.get("n_simulations"))
 market_blend = float(dbutils.widgets.get("market_blend"))
@@ -62,38 +60,25 @@ send_email = dbutils.widgets.get("send_email").lower() == "true"
 notify_email = dbutils.widgets.get("notify_email").strip()
 
 pbp_table = f"{catalog}.{schema}.nflverse_pbp"
+current_pbp_table = f"{catalog}.{schema}.nflverse_pbp_current"
 odds_table = f"{catalog}.{schema}.game_odds_latest"
 schedule_table = f"{catalog}.{schema}.nflverse_schedule"
 predictions_table = f"{catalog}.{schema}.monte_carlo_predictions"
 
-print(f"PBP analytics:  {pbp_table} (season {pbp_season})")
+print(f"Prior PBP:      {pbp_table} (season {pbp_season})")
+print(f"Current PBP:    {current_pbp_table} (season {current_pbp_season})")
 print(f"Odds lines:     {odds_table}")
 print(f"Schedule:       {schedule_table} (season {season})")
 
 # COMMAND ----------
 
 import os
-import sys
-
-
-def _add_src_to_path() -> str:
-    candidates = [
-        os.path.abspath(os.path.join(os.getcwd(), "..", "src")),
-        os.path.abspath(os.path.join(os.getcwd(), "src")),
-    ]
-    for path in candidates:
-        if os.path.isdir(path):
-            sys.path.insert(0, path)
-            return path
-    return ""
-
-
-_add_src_to_path()
 
 import pandas as pd
 
 from nfl_odds.simulation import (
     SimulationConfig,
+    combine_pbp_seasons,
     compute_team_scoring_profiles,
     infer_next_week,
     new_prediction_run_id,
@@ -110,12 +95,22 @@ from nfl_odds.spark_io import pandas_to_spark
 
 # COMMAND ----------
 
-pbp_pdf = spark.table(pbp_table).toPandas()
+prior_pbp_pdf = spark.table(pbp_table).toPandas()
+if spark.catalog.tableExists(current_pbp_table):
+    current_pbp_pdf = spark.table(current_pbp_table).toPandas()
+else:
+    current_pbp_pdf = pd.DataFrame()
+    print(f"Current PBP table {current_pbp_table} not found; using prior season only")
+
+pbp_pdf = combine_pbp_seasons(
+    prior_pbp_pdf,
+    current_pbp_pdf,
+    prior_season=pbp_season,
+    current_season=current_pbp_season,
+)
 odds_pdf = spark.table(odds_table).toPandas()
 schedule_pdf = spark.table(schedule_table).toPandas()
 
-if "season" in pbp_pdf.columns:
-    pbp_pdf = pbp_pdf[pbp_pdf["season"] == pbp_season].copy()
 if "season" in schedule_pdf.columns:
     schedule_pdf = schedule_pdf[schedule_pdf["season"] == season].copy()
 

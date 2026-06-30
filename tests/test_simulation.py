@@ -3,6 +3,7 @@ import pandas as pd
 from nfl_odds.simulation import (
     SimulationConfig,
     calibrate_expected_scores_to_market,
+    combine_pbp_seasons,
     compute_team_scoring_profiles,
     expected_matchup_scores,
     infer_next_week,
@@ -56,6 +57,41 @@ def _sample_odds_week1() -> pd.DataFrame:
             }
         ]
     )
+
+
+def test_combine_pbp_seasons_prefers_current_on_duplicate_game():
+    prior = pd.DataFrame(
+        [
+            {
+                "game_id": "2026_01_NE_SEA",
+                "season": 2025,
+                "home_team": "SEA",
+                "away_team": "NE",
+                "total_home_score": 20.0,
+                "total_away_score": 10.0,
+            }
+        ]
+    )
+    current = pd.DataFrame(
+        [
+            {
+                "game_id": "2026_01_NE_SEA",
+                "season": 2026,
+                "home_team": "SEA",
+                "away_team": "NE",
+                "total_home_score": 30.0,
+                "total_away_score": 14.0,
+            }
+        ]
+    )
+    combined = combine_pbp_seasons(
+        prior,
+        current,
+        prior_season=2025,
+        current_season=2026,
+    )
+    assert len(combined) == 1
+    assert combined.iloc[0]["total_home_score"] == 30.0
 
 
 def test_compute_team_scoring_profiles():

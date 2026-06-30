@@ -7,7 +7,7 @@ include:
 artifacts:
   nfl_odds_wheel:
     type: whl
-    build: .venv\Scripts\python.exe -m build --wheel -o dist
+    build: python -m pip install -q build && python -m build --wheel -o dist
     path: .
 
 sync:
@@ -46,13 +46,15 @@ variables:
   secret_scope:
     description: Databricks secret scope containing odds_api_key
     default: nfl
+  notify_email:
+    description: Job notification email (from databricks_email_account env var)
+    default: ${env.databricks_email_account}
 targets:
   dev:
     mode: development
     default: true
     workspace:
       host: https://dbc-89a97ed5-5f7d.cloud.databricks.com
-      profile: wyatts_databricks
     variables:
       catalog: workspace
       schema: nfl
@@ -61,7 +63,6 @@ targets:
     mode: production
     workspace:
       host: https://dbc-89a97ed5-5f7d.cloud.databricks.com
-      profile: wyatts_databricks
       root_path: /Workspace/Users/${workspace.current_user.userName}/.bundle/${bundle.name}/${bundle.target}
     variables:
       catalog: workspace

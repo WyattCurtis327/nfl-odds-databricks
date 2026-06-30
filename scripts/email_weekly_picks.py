@@ -16,22 +16,22 @@ sys.path.insert(0, str(ROOT / "src"))
 
 from nfl_odds.notifications import format_predictions_email_html, send_email_sendgrid
 
-DEFAULT_WAREHOUSE_ID = "abae422499df211c"
-DEFAULT_PROFILE = "wyatts_databricks"
+
+def _env(name: str, fallback: str = "") -> str:
+    return os.environ.get(name, fallback).strip()
 
 
 def _load_sendgrid_key() -> str:
     return (
-        os.environ.get("SENDGRID_API_KEY")
-        or os.environ.get("sendgrid_api_key")
-        or ""
-    ).strip()
+        _env("SENDGRID_API_KEY")
+        or _env("sendgrid_api_key")
+    )
 
 
 def _load_from_email(fallback: str) -> str:
     return (
-        os.environ.get("SENDGRID_FROM_EMAIL")
-        or os.environ.get("SENDGRID_FROM")
+        _env("SENDGRID_FROM_EMAIL")
+        or _env("SENDGRID_FROM")
         or fallback
     ).strip()
 
@@ -92,15 +92,32 @@ def fetch_predictions_sql(
 
 
 def main() -> None:
+    default_email = _env("databricks_email_account")
+    default_profile = _env("databricks_profile")
+    default_warehouse = _env("databricks_cluster_id")
+
     parser = argparse.ArgumentParser()
     parser.add_argument("--catalog", default="workspace")
     parser.add_argument("--schema", default="nfl")
     parser.add_argument("--season", type=int, default=2026)
     parser.add_argument("--week", type=int, required=True)
-    parser.add_argument("--to", dest="to_email", default="wyatt_curtis@hotmail.com")
-    parser.add_argument("--profile", default=DEFAULT_PROFILE)
-    parser.add_argument("--warehouse-id", default=DEFAULT_WAREHOUSE_ID)
+    parser.add_argument("--to", dest="to_email", default=default_email)
+    parser.add_argument("--profile", default=default_profile)
+    parser.add_argument("--warehouse-id", default=default_warehouse)
     args = parser.parse_args()
+
+    if not args.to_email:
+        raise SystemExit(
+            "Set databricks_email_account or pass --to with a recipient address."
+        )
+    if not args.profile:
+        raise SystemExit(
+            "Set databricks_profile or pass --profile for the Databricks CLI."
+        )
+    if not args.warehouse_id:
+        raise SystemExit(
+            "Set databricks_cluster_id or pass --warehouse-id for SQL warehouse access."
+        )
 
     api_key = _load_sendgrid_key()
     if not api_key:

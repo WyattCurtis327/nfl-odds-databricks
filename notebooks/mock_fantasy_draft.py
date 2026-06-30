@@ -8,8 +8,8 @@
 # MAGIC Set **Draft position** to your slot (1–12). The notebook ranks players by PPR points per game
 # MAGIC from `workspace.nfl` Delta tables and drafts the best available fit for every team.
 # MAGIC
-# MAGIC **Source tables:** `workspace.nfl.nflverse_pbp`, `workspace.nfl.nflverse_rosters`,
-# MAGIC `workspace.nfl.nflverse_schedule`
+# MAGIC **Source tables:** `workspace.nfl.nflverse_pbp`, `workspace.nfl.nflverse_pbp_current`,
+# MAGIC `workspace.nfl.nflverse_rosters`, `workspace.nfl.nflverse_schedule`
 
 # COMMAND ----------
 
@@ -21,42 +21,28 @@ dbutils.widgets.dropdown(
 )
 dbutils.widgets.text("catalog", "workspace", "Unity Catalog")
 dbutils.widgets.text("schema", "nfl", "Schema")
-dbutils.widgets.text("pbp_season", "2025", "PBP analytics season")
+dbutils.widgets.text("pbp_season", "2025", "Prior-season PBP analytics")
+dbutils.widgets.text("current_pbp_season", "2026", "In-season PBP analytics")
 dbutils.widgets.text("roster_season", "2026", "Roster season for positions")
 
 catalog = dbutils.widgets.get("catalog")
 schema = dbutils.widgets.get("schema")
-pbp_season = dbutils.widgets.get("pbp_season")
+pbp_season = int(dbutils.widgets.get("pbp_season"))
+current_pbp_season = int(dbutils.widgets.get("current_pbp_season"))
 roster_season = dbutils.widgets.get("roster_season")
 draft_position = int(dbutils.widgets.get("draft_position"))
 
 pbp_table = f"{catalog}.{schema}.nflverse_pbp"
+current_pbp_table = f"{catalog}.{schema}.nflverse_pbp_current"
 rosters_table = f"{catalog}.{schema}.nflverse_rosters"
 schedule_table = f"{catalog}.{schema}.nflverse_schedule"
 
-print(f"Reading PBP stats from: {pbp_table}")
+print(f"Reading prior PBP from:   {pbp_table} (season {pbp_season})")
+print(f"Reading current PBP from: {current_pbp_table} (season {current_pbp_season})")
 print(f"Reading rosters from:   {rosters_table}")
 print(f"Reading schedule from:  {schedule_table}")
 
 # COMMAND ----------
-
-import os
-import sys
-
-
-def _add_src_to_path() -> str:
-    candidates = [
-        os.path.abspath(os.path.join(os.getcwd(), "..", "src")),
-        os.path.abspath(os.path.join(os.getcwd(), "src")),
-    ]
-    for path in candidates:
-        if os.path.isdir(path):
-            sys.path.insert(0, path)
-            return path
-    return ""
-
-
-_add_src_to_path()
 
 import pandas as pd
 
@@ -67,6 +53,7 @@ from nfl_odds.fantasy import (
     run_mock_draft,
     snake_pick_order,
 )
+from nfl_odds.simulation import combine_pbp_seasons
 
 # COMMAND ----------
 
@@ -75,12 +62,21 @@ from nfl_odds.fantasy import (
 
 # COMMAND ----------
 
-pbp_pdf = spark.table(pbp_table).toPandas()
+prior_pbp_pdf = spark.table(pbp_table).toPandas()
+if spark.catalog.tableExists(current_pbp_table):
+    current_pbp_pdf = spark.table(current_pbp_table).toPandas()
+else:
+    current_pbp_pdf = pd.DataFrame()
+    print(f"Current PBP table {current_pbp_table} not found; using prior season only")
+
+pbp_pdf = combine_pbp_seasons(
+    prior_pbp_pdf,
+    current_pbp_pdf,
+    prior_season=pbp_season,
+    current_season=current_pbp_season,
+)
 rosters_pdf = spark.table(rosters_table).toPandas()
 schedule_pdf = spark.table(schedule_table).toPandas()
-
-if "season" in pbp_pdf.columns:
-    pbp_pdf = pbp_pdf[pbp_pdf["season"] == int(pbp_season)].copy()
 
 if "season" in rosters_pdf.columns:
     rosters_pdf = rosters_pdf[rosters_pdf["season"] == int(roster_season)].copy()
