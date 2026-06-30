@@ -15,6 +15,7 @@ __pycache__/
 Thumbs.db
 desktop.ini
 *.log
+terminals/
 
 # Tooling caches
 .mypy_cache/
